@@ -1,0 +1,1822 @@
+---
+title: "01_TS_FinalProj_Modeling"
+author: "Mark Roberts"
+date: "5/27/2020"
+output: html_document
+---
+```{r}
+library(forecast)
+library(stats)
+library(dplyr)
+library(Metrics)
+```
+
+importing data
+```{r}
+sales <- read.csv("/Users/markroberts/Desktop/Time Series/FinalProject/m5_data/mr_clean_would_be_proud.csv")
+```
+
+looking at head of data
+```{r}
+tail(sales,50)
+```
+
+grabbing daily and weekly test/train
+```{r}
+# data for models that require time series objects
+# you would extract whatever series you want from them
+dates <- as.Date(sales$date)
+sales_series <- sales %>% select(-date, -(trend:year), -(paste0('snap_',states[1]):December))
+# data with daily frequency series
+daily <- xts(sales_series, order.by = dates)
+# data with weekly frequency series
+weekly <- xts(sales_series, order.by = dates, frequency = 7)
+attr(weekly, 'frequency') <- 7
+# matrix you would pass to xreg parameter
+sales_xreg <- sales %>% select((paste0('snap_',states[1]):Religious))
+sales_xreg <- as.matrix(sales_xreg)
+
+# train, test split
+daily_train <- daily[1:1885,]
+daily_test <- daily[1886:1913,]
+weekly_train <- weekly[1:1885,]
+weekly_test <- weekly[1886:1913,]
+sales_xreg_train <- sales_xreg[1:1885,]
+sales_xreg_test <- sales_xreg[1886:1913,]
+
+# and you're good to go :)
+```
+
+```{r}
+head(daily_train)
+```
+
+#Models:
+
+Baselines: 
+   average 
+   Naive 
+   seasonal naive
+   
+Regression (xreg = trend, year, day dummies, month dummies, snap, event dummies, prices in categories
+
+ARIMA (daily and weekly)
+
+SARIMA (daily and weekly)
+
+Regression with ARIMA errors (xreg = prices in category, snap, event type dummies)
+
+ARFIMA
+
+Holt-winters
+
+STL
+
+Prophet
+
+
+Criteria for evaluation:
+Train-test split, MASE on test
+Ljung-Box test p-value / qualitative assessment of residuals
+TS CV (with different rolling windows to compare)
+  Only for top model of each SKU (CV MASE)  if we can reduce number of folds
+
+#Making Daily Train and Daily Test for each item
+
+### Train Daily
+```{r}
+daily_train_HH_27 <- xts(daily_train[,1])
+daily_train_HH_99 <- xts(daily_train[,2])
+daily_train_HH_125 <- xts(daily_train[,3])
+daily_train_HH_129 <- xts(daily_train[,4])
+daily_train_HH_474 <- xts(daily_train[,5])
+```
+
+### Train Weekly
+```{r}
+weekly_train_HH_27 <- xts(weekly_train[,1])
+attr(weekly_train_HH_27, 'frequency') <- 7
+
+weekly_train_HH_99 <- xts(weekly_train[,2])
+attr(weekly_train_HH_99, 'frequency') <- 7
+
+weekly_train_HH_125 <- xts(weekly_train[,3])
+attr(weekly_train_HH_125, 'frequency') <- 7
+
+weekly_train_HH_129 <- xts(weekly_train[,4])
+attr(weekly_train_HH_129, 'frequency') <- 7
+
+weekly_train_HH_474 <- xts(weekly_train[,5])
+attr(weekly_train_HH_474, 'frequency') <- 7
+```
+
+### Test Daily
+```{r}
+daily_test_HH_27 <- xts(daily_test[,1])
+daily_test_HH_99 <- xts(daily_test[,2])
+daily_test_HH_125 <- xts(daily_test[,3])
+daily_test_HH_129 <- xts(daily_test[,4])
+daily_test_HH_474 <- xts(daily_test[,5])
+```
+
+### Test Weekly
+```{r}
+weekly_test_HH_27 <- xts(weekly_test[,1])
+weekly_test_HH_99 <- xts(weekly_test[,2])
+weekly_test_HH_125 <- xts(weekly_test[,3])
+weekly_test_HH_129 <- xts(weekly_test[,4])
+weekly_test_HH_474 <- xts(weekly_test[,5])
+```
+
+
+
+# Household_1_027 Models
+
+### Average
+```{r}
+#calculating forecasts
+HH27_avg_daily <- meanf(daily_train_HH_27, h=28)
+HH27_avg_weekly <- meanf(weekly_train_HH_27, h=28)
+
+#calculating mase
+mase27_avg_daily <- mase(as.numeric(daily_test_HH_27), as.numeric(HH27_avg_daily$mean))
+mase27_avg_weekly <- mase(as.numeric(weekly_test_HH_27), as.numeric(HH27_avg_weekly$mean))
+
+#calculating residuals
+HH27_avg_daily_residuals <- residuals(meanf(daily_train_HH_27, h=28))
+HH27_avg_weekly_residuals <- residuals(meanf(weekly_train_HH_27, h=28))
+
+#Box Tests
+HH27_avg_daily_boxtest_pvalue <- Box.test(HH27_avg_daily_residuals, lag =10, type ="Ljung")$p.value
+HH27_avg_weekly_boxtest_pvalue <- Box.test(HH27_avg_weekly_residuals, lag =14, type ="Ljung")$p.value
+
+#checkresiduals(HH27_avg_daily)
+#checkresiduals(HH27_avg_weekly)
+```
+
+### Naive
+```{r}
+#calculating forecasts
+HH27_naive_daily <- naive(daily_train_HH_27, h=28)
+HH27_naive_weekly <- naive(weekly_train_HH_27, h=28)
+
+#calculating mase
+mase27_naive_daily <- mase(as.numeric(daily_test_HH_27), as.numeric(HH27_naive_daily$mean))
+mase27_naive_weekly <- mase(as.numeric(weekly_test_HH_27), as.numeric(HH27_naive_weekly$mean))
+
+#calculating residuals
+HH27_naive_daily_residuals <- residuals(naive(daily_train_HH_27, h=28))
+HH27_naive_weekly_residuals <- residuals(naive(weekly_train_HH_27, h=28))
+
+#Box Tests
+HH27_naive_daily_boxtest_pvalue <- Box.test(HH27_naive_daily_residuals, lag =10, type ="Ljung")$p.value
+HH27_naive_weekly_boxtest_pvalue <- Box.test(HH27_naive_weekly_residuals, lag =14, type ="Ljung")$p.value
+
+#visual check of residuals
+checkresiduals(HH27_naive_daily)
+checkresiduals(HH27_naive_weekly)
+
+```
+
+### Seasonal Naive
+```{r}
+#calculating forecasts
+HH27_seas_naive_daily <- snaive(daily_train_HH_27, h=28)
+HH27_seas_naive_weekly <- snaive(weekly_train_HH_27, h=28)
+
+#calculating mase 
+mase27_seas_naive_daily <- mase(as.numeric(daily_test_HH_27), as.numeric(HH27_seas_naive_daily$mean))
+mase27_seas_naive_weekly <- mase(as.numeric(weekly_test_HH_27), as.numeric(HH27_seas_naive_weekly$mean))
+
+#calculating residuals
+HH27_seas_naive_daily_residuals <- residuals(snaive(daily_train_HH_27, h=28))
+HH27_seas_naive_weekly_residuals <- residuals(snaive(weekly_train_HH_27, h=28))
+
+#Box tests
+HH27_seas_naive_daily_boxtest_pvalue <- Box.test(HH27_seas_naive_daily_residuals, lag =10, type ="Ljung")$p.value
+HH27_seas_naive_weekly_boxtest_pvalue <- Box.test(HH27_seas_naive_weekly_residuals, lag =14, type ="Ljung")$p.value
+
+#visual check of residuals
+checkresiduals(HH27_seas_naive_daily)
+checkresiduals(HH27_seas_naive_weekly)
+
+```
+
+### Regression
+(xreg = trend, year, day dummies, month dummies, snap, event dummies, prices in category)es
+```{r}
+#creating linear model
+HH27_linmod <- lm(HOUSEHOLD_1_027~., data =regression_train)
+
+#forecasting linear model
+HH27_linmod_forecast <- predict(HH27_linmod, newdata = regression_test)
+
+#calculating mase
+mase27_linmod <- mase(as.numeric(weekly_test_HH_27),HH27_linmod_forecast)
+
+#Box test
+HH27_linmod_box_test_pvalue <- Box.test(HH27_linmod$residuals, lag =14, type ="Ljung")$p.value
+
+#visual inspection of residuals
+checkresiduals(HH27_linmod)
+```
+
+### Arima
+```{r}
+#running auto arima
+HH27_arima_daily <- auto.arima(daily_train_HH_27, seasonal = F)
+HH27_arima_weekly <- auto.arima(weekly_train_HH_27, seasonal = F)
+
+#calculating forecast
+HH27_arima_daily_forecast <- forecast(HH27_arima_daily, h=28)
+HH27_arima_weekly_forecast <- forecast(HH27_arima_weekly, h=28)
+
+#calculating mase
+mase27_arima_daily <- mase(as.numeric(daily_test_HH_27), as.numeric(HH27_arima_daily_forecast$mean))
+mase27_arima_weekly <- mase(as.numeric(weekly_test_HH_27), as.numeric(HH27_arima_weekly_forecast$mean))
+
+#residuals
+HH27_arima_daily_residuals <- residuals(HH27_arima_daily)
+HH27_arima_weekly_residuals <- residuals(HH27_arima_weekly)
+
+#boxtest pvalue
+HH27_arima_daily_box_test_pvalue <- Box.test(HH27_arima_daily_residuals, lag =10, type ="Ljung")$p.value
+HH27_arima_weekly_box_test_pvalue <- Box.test(HH27_arima_weekly_residuals, lag =14, type ="Ljung")$p.value
+
+#visual inspection of residuals
+checkresiduals(HH27_arima_daily)
+checkresiduals(HH27_arima_weekly)
+
+```
+
+### Seasonal Arima
+```{r}
+#fitting seasonal auto arima
+HH27_seas_arima_daily <- auto.arima(daily_train_HH_27, seasonal = T)
+HH27_seas_arima_weekly <- auto.arima(weekly_train_HH_27, seasonal = T)
+
+#forecasting 
+HH27_seas_arima_daily_forecast <- forecast(HH27_seas_arima_daily, h=28)
+HH27_seas_arima_weekly_forecast <- forecast(HH27_seas_arima_weekly, h=28)
+
+#calculating mase
+mase27_seas_arima_daily <- mase(as.numeric(daily_test_HH_27), as.numeric(HH27_seas_arima_daily_forecast$mean))
+mase27_seas_arima_weekly <- mase(as.numeric(weekly_test_HH_27), as.numeric(HH27_seas_arima_weekly_forecast$mean))
+
+#boxtest pvalue
+HH27_seas_arima_daily_box_test_pvalue <- Box.test(residuals(HH27_seas_arima_daily), lag =10, type ="Ljung")$p.value
+HH27_seas_arima_weekly_box_test_pvalue <- Box.test(residuals(HH27_seas_arima_weekly), lag =14, type ="Ljung")$p.value
+
+#visual inspection
+checkresiduals(HH27_seas_arima_daily)
+checkresiduals(HH27_seas_arima_weekly)
+
+```
+
+### Regression with ARIMA errors (xreg = prices in category, snap, event type dummies)
+```{r}
+#grabbing x_reg
+regression_xreg <- as.matrix(regression_train[,9:35])
+
+#fitting with auto arima
+#HH27_reg_arma_errors_mod <- auto.arima(regression_train$HOUSEHOLD_1_027, xreg = regression_xreg)
+#HH27_reg_arma_errors_forecast <- predict(HH27_reg_arma_errors, newdata=regression_test[,9:35])
+
+#calculating mase
+#mase27_reg_arima_errors <- mase(as.numeric(daily_test_HH_27), as.numeric(HH27_reg_arma_errors_forecast))
+
+mase27_reg_arima_errors <- 0
+
+#stopping here because this did not work for some reason...
+```
+
+### ARFIMA
+```{r}
+#fitting arfima
+HH27_arfima <- arfima(regression_train$HOUSEHOLD_1_027)
+
+#forecasting values
+HH27_arfima_forecast <- forecast(HH27_arfima, h=28)
+
+#calculating mase
+mase27_arfima <- mase(as.numeric(daily_test_HH_27), as.numeric(HH27_arfima_forecast$mean))
+
+#box test pvalue
+HH27_arfima_box_test_pvalue <- Box.test(residuals(HH27_arfima), lag =10, type ="Ljung")$p.value
+
+#visual inspection
+checkresiduals(HH27_arfima)
+```
+
+### Holt Winters
+```{r}
+#fititng model
+HH27_hw_mod <- HoltWinters(weekly_train_HH_27, seasonal='additive')
+
+#forecasting
+HH27_hw_forecast <- forecast(HH27_hw_mod, h=28)
+
+#calculating mase
+mase27_hw <- mase(as.numeric(daily_test_HH_27), as.numeric(HH27_hw_forecast$mean))
+
+#box test
+HH27_hw_box_test_pvalue <- Box.test(residuals(HH27_hw_mod), lag =10, type ="Ljung")$p.value
+
+#visaual inspection
+checkresiduals(HH27_hw_mod)
+
+```
+
+### STL
+```{r}
+#fitting model
+HH27_stl <- stl(weekly_train_HH_27, 'periodic')
+
+#forecasting
+HH27_stl_forecast <- forecast(HH27_stl, h=28)
+
+#calculating mase
+mase27_stl <- mase(as.numeric(weekly_test_HH_27), as.numeric(HH27_stl_forecast$mean))
+
+#box test on residuals aka remainder
+HH27_stl_box_test_pvalue <- Box.test(remainder(HH27_stl), lag =10, type ="Ljung")$p.value
+
+#visual inspection
+checkresiduals(remainder(HH27_stl))
+
+```
+
+#Prophet
+```{r}
+library(prophet)
+
+prophet_weekly_train_HH_27 <- as.data.frame(
+   cbind(
+   "ds" = as.vector(as.Date(dates[1:1885], format="%Y-%m-%d")),
+   "y" = as.vector(weekly_train_HH_27$HOUSEHOLD_1_027)
+))
+prophet_weekly_train_HH_27[['ds']] <- as.Date(prophet_weekly_train_HH_27[['ds']], format='%Y-%m-%d')
+
+
+#prophet_weekly_train_HH_27
+
+#fitting prophet onto data
+p_weekly_train_HH_27 <- prophet(prophet_weekly_train_HH_27)
+
+#making future dataframe
+future_27 <- make_future_dataframe(p_weekly_train_HH_27, periods = 28)
+
+#creating forecast
+prophet_forecast_27 <- predict(p_weekly_train_HH_27, future_27)
+
+
+#prophet mase
+mase27_prophet <- mase(as.numeric(weekly_test$HOUSEHOLD_1_027) ,tail(prophet_forecast_27$yhat[], n=28))
+
+#residuals prophet
+residuals_prophet_HH27 <- tail(prophet_forecast_27$yhat[],28) - weekly_test$HOUSEHOLD_1_027
+
+# prophet box_test pvalue
+HH27_prophet_box_test_pvalue <- Box.test(residuals_prophet_HH27, lag =14, type ="Ljung")$p.value
+
+#generic prophet plot
+plot(p_weekly_train_HH_27, prophet_forecast_27)
+
+#cool interactive graph with prophet
+dyplot.prophet(p_weekly_train_HH_27, prophet_forecast_27)
+```
+
+
+
+
+### Collecting mase scores for item 27
+```{r}
+mace_res_27 <- c( mase27_avg_daily,
+                  mase27_avg_weekly,
+                  mase27_naive_daily,
+                  mase27_naive_weekly,
+                  mase27_seas_naive_daily,
+                  mase27_seas_naive_weekly,
+                  mase27_linmod,
+                  mase27_arima_daily,
+                  mase27_arima_weekly,
+                  mase27_seas_arima_daily,
+                  mase27_seas_arima_weekly,
+                  mase27_arfima,
+                  mase27_hw,
+                  mase27_stl,
+                  mase27_prophet 
+                 
+                  )
+```
+
+### Collecting p-values of Ljung Box test for item 27
+```{r}
+box_test_res_27 <- c(HH27_avg_daily_boxtest_pvalue, 
+            HH27_avg_weekly_boxtest_pvalue,
+            HH27_naive_daily_boxtest_pvalue,
+            HH27_naive_weekly_boxtest_pvalue,
+            HH27_seas_naive_daily_boxtest_pvalue,
+            HH27_seas_naive_weekly_boxtest_pvalue,
+            HH27_linmod_box_test_pvalue,
+            HH27_arima_daily_box_test_pvalue,
+            HH27_arima_weekly_box_test_pvalue,
+            HH27_seas_arima_daily_box_test_pvalue,
+            HH27_seas_arima_weekly_box_test_pvalue,
+            HH27_arfima_box_test_pvalue,
+            HH27_hw_box_test_pvalue,
+            HH27_stl_box_test_pvalue,
+            HH27_prophet_box_test_pvalue
+            )
+```
+
+
+
+
+
+
+
+
+
+# Household_1_099 Models
+
+### Average
+```{r}
+#calculating forecasts
+HH99_avg_daily <- meanf(daily_train_HH_99, h=28)
+HH99_avg_weekly <- meanf(weekly_train_HH_99, h=28)
+
+#calculating mase
+mase99_avg_daily <- mase(as.numeric(daily_test_HH_99), as.numeric(HH99_avg_daily$mean))
+mase99_avg_weekly <- mase(as.numeric(weekly_test_HH_99), as.numeric(HH99_avg_weekly$mean))
+
+
+#calculating residuals
+HH99_avg_daily_residuals <- residuals(meanf(daily_train_HH_99, h=28))
+HH99_avg_weekly_residuals <- residuals(meanf(weekly_train_HH_99, h=28))
+
+#Box Tests
+HH99_avg_daily_boxtest_pvalue <- Box.test(HH99_avg_daily_residuals, lag =10, type ="Ljung")$p.value
+HH99_avg_weekly_boxtest_pvalue <- Box.test(HH99_avg_weekly_residuals, lag =14, type ="Ljung")$p.value
+
+#checkresiduals(HH99_avg_daily)
+#checkresiduals(HH99_avg_weekly)
+```
+
+### Naive
+```{r}
+#calculating forecasts
+HH99_naive_daily <- naive(daily_train_HH_99, h=28)
+HH99_naive_weekly <- naive(weekly_train_HH_99, h=28)
+
+#calculating mase
+mase99_naive_daily <- mase(as.numeric(daily_test_HH_99), as.numeric(HH99_naive_daily$mean))
+mase99_naive_weekly <- mase(as.numeric(weekly_test_HH_99), as.numeric(HH99_naive_weekly$mean))
+
+#calculating residuals
+HH99_naive_daily_residuals <- residuals(naive(daily_train_HH_99, h=28))
+HH99_naive_weekly_residuals <- residuals(naive(weekly_train_HH_99, h=28))
+
+#Box Tests
+HH99_naive_daily_boxtest_pvalue <- Box.test(HH99_naive_daily_residuals, lag =10, type ="Ljung")$p.value
+HH99_naive_weekly_boxtest_pvalue <- Box.test(HH99_naive_weekly_residuals, lag =14, type ="Ljung")$p.value
+
+#visual check of residuals
+checkresiduals(HH99_naive_daily)
+checkresiduals(HH99_naive_weekly)
+
+```
+
+### Seasonal Naive
+```{r}
+#calculating forecasts
+HH99_seas_naive_daily <- snaive(daily_train_HH_99, h=28)
+HH99_seas_naive_weekly <- snaive(weekly_train_HH_99, h=28)
+
+#calculating mase 
+mase99_seas_naive_daily <- mase(as.numeric(daily_test_HH_99), as.numeric(HH99_seas_naive_daily$mean))
+mase99_seas_naive_weekly <- mase(as.numeric(weekly_test_HH_99), as.numeric(HH99_seas_naive_weekly$mean))
+
+#calculating residuals
+HH99_seas_naive_daily_residuals <- residuals(snaive(daily_train_HH_99, h=28))
+HH99_seas_naive_weekly_residuals <- residuals(snaive(weekly_train_HH_99, h=28))
+
+#Box tests
+HH99_seas_naive_daily_boxtest_pvalue <- Box.test(HH99_seas_naive_daily_residuals, lag =10, type ="Ljung")$p.value
+HH99_seas_naive_weekly_boxtest_pvalue <- Box.test(HH99_seas_naive_weekly_residuals, lag =14, type ="Ljung")$p.value
+
+#visual check of residuals
+checkresiduals(HH99_seas_naive_daily)
+checkresiduals(HH99_seas_naive_weekly)
+
+```
+
+### Regression
+(xreg = trend, year, day dummies, month dummies, snap, event dummies, prices in category)es
+```{r}
+#creating linear model
+HH99_linmod <- lm(HOUSEHOLD_1_099~., data =regression_train)
+
+#forecasting linear model
+HH99_linmod_forecast <- predict(HH99_linmod, newdata = regression_test)
+
+#calculating mase
+mase99_linmod <- mase(as.numeric(weekly_test_HH_99),HH99_linmod_forecast)
+
+#Box test
+HH99_linmod_box_test_pvalue <- Box.test(HH99_linmod$residuals, lag =14, type ="Ljung")$p.value
+
+#visual inspection of residuals
+checkresiduals(HH99_linmod)
+```
+
+### Arima
+```{r}
+#running auto arima
+HH99_arima_daily <- auto.arima(daily_train_HH_99, seasonal = F)
+HH99_arima_weekly <- auto.arima(weekly_train_HH_99, seasonal = F)
+
+#calculating forecast
+HH99_arima_daily_forecast <- forecast(HH99_arima_daily, h=28)
+HH99_arima_weekly_forecast <- forecast(HH99_arima_weekly, h=28)
+
+#calculating mase
+mase99_arima_daily <- mase(as.numeric(daily_test_HH_99), as.numeric(HH99_arima_daily_forecast$mean))
+mase99_arima_weekly <- mase(as.numeric(weekly_test_HH_99), as.numeric(HH99_arima_weekly_forecast$mean))
+
+#residuals
+HH99_arima_daily_residuals <- residuals(HH99_arima_daily)
+HH99_arima_weekly_residuals <- residuals(HH99_arima_weekly)
+
+#boxtest pvalue
+HH99_arima_daily_box_test_pvalue <- Box.test(HH99_arima_daily_residuals, lag =10, type ="Ljung")$p.value
+HH99_arima_weekly_box_test_pvalue <- Box.test(HH99_arima_weekly_residuals, lag =14, type ="Ljung")$p.value
+
+#visual inspection of residuals
+checkresiduals(HH99_arima_daily)
+checkresiduals(HH99_arima_weekly)
+```
+
+### Seasonal Arima
+```{r}
+#fitting seasonal auto arima
+HH99_seas_arima_daily <- auto.arima(daily_train_HH_99, seasonal = T)
+HH99_seas_arima_weekly <- auto.arima(weekly_train_HH_99, seasonal = T)
+
+#forecasting 
+HH99_seas_arima_daily_forecast <- forecast(HH99_seas_arima_daily, h=28)
+HH99_seas_arima_weekly_forecast <- forecast(HH99_seas_arima_weekly, h=28)
+
+#calculating mase
+mase99_seas_arima_daily <- mase(as.numeric(daily_test_HH_99), as.numeric(HH99_seas_arima_daily_forecast$mean))
+mase99_seas_arima_weekly <- mase(as.numeric(weekly_test_HH_99), as.numeric(HH99_seas_arima_weekly_forecast$mean))
+
+#boxtest pvalue
+HH99_seas_arima_daily_box_test_pvalue <- Box.test(residuals(HH99_seas_arima_daily), lag =10, type ="Ljung")$p.value
+HH99_seas_arima_weekly_box_test_pvalue <- Box.test(residuals(HH99_seas_arima_weekly), lag =14, type ="Ljung")$p.value
+
+#visual inspection
+checkresiduals(HH99_seas_arima_daily)
+checkresiduals(HH99_seas_arima_weekly)
+```
+
+### Regression with ARIMA errors (xreg = prices in category, snap, event type dummies)
+```{r}
+#grabbing x_reg
+regression_xreg <- as.matrix(regression_train[,9:35])
+
+#fitting with auto arima
+#HH99_reg_arma_errors_mod <- auto.arima(regression_train$HOUSEHOLD_1_099, xreg = regression_xreg)
+#HH99_reg_arma_errors_forecast <- predict(HH99_reg_arma_errors, newdata=regression_test[,9:35])
+
+#calculating mase
+#mase99_reg_arima_errors <- mase(as.numeric(daily_test_HH_99), as.numeric(HH99_reg_arma_errors_forecast))
+
+ase99_reg_arima_errors <- 0
+
+#stopping here because this did not work for some reason...
+```
+
+### ARFIMA
+```{r}
+#fitting arfima
+HH99_arfima <- arfima(regression_train$HOUSEHOLD_1_099)
+
+#forecasting values
+HH99_arfima_forecast <- forecast(HH99_arfima, h=28)
+
+#calculating mase
+mase99_arfima <- mase(as.numeric(daily_test_HH_99), as.numeric(HH99_arfima_forecast$mean))
+
+#box test pvalue
+HH99_arfima_box_test_pvalue <- Box.test(residuals(HH99_arfima), lag =10, type ="Ljung")$p.value
+
+#visual inspection
+checkresiduals(HH99_arfima)
+```
+
+### Holt Winters
+```{r}
+#fititng model
+HH99_hw_mod <- HoltWinters(weekly_train_HH_99, seasonal='additive')
+
+#forecasting
+HH99_hw_forecast <- forecast(HH99_hw_mod, h=28)
+
+#calculating mase
+mase99_hw <- mase(as.numeric(daily_test_HH_99), as.numeric(HH99_hw_forecast$mean))
+
+#box test
+HH99_hw_box_test_pvalue <- Box.test(residuals(HH99_hw_mod), lag =10, type ="Ljung")$p.value
+
+#visaual inspection
+checkresiduals(HH99_hw_mod)
+```
+
+### STL
+```{r}
+#fitting model
+HH99_stl <- stl(weekly_train_HH_99, 'periodic')
+
+#forecasting
+HH99_stl_forecast <- forecast(HH99_stl, h=28)
+
+#calculating mase
+mase99_stl <- mase(as.numeric(weekly_test_HH_99), as.numeric(HH99_stl_forecast$mean))
+
+#box test on residuals aka remainder
+HH99_stl_box_test_pvalue <- Box.test(remainder(HH99_stl), lag =10, type ="Ljung")$p.value
+
+#visual inspection
+checkresiduals(remainder(HH99_stl))
+```
+
+#Prophet
+```{r}
+library(prophet)
+
+prophet_weekly_train_HH_99 <- as.data.frame(
+   cbind(
+   "ds" = as.vector(as.Date(dates[1:1885], format="%Y-%m-%d")),
+   "y" = as.vector(weekly_train_HH_99$HOUSEHOLD_1_099)
+))
+prophet_weekly_train_HH_99[['ds']] <- as.Date(prophet_weekly_train_HH_99[['ds']], format='%Y-%m-%d')
+
+
+#prophet_weekly_train_HH_99
+
+#fitting prophet onto data
+p_weekly_train_HH_99 <- prophet(prophet_weekly_train_HH_99)
+
+#making future dataframe
+future_99 <- make_future_dataframe(p_weekly_train_HH_99, periods = 28)
+
+#creating forecast
+prophet_forecast_99 <- predict(p_weekly_train_HH_99, future_99)
+
+
+#prophet mase
+mase99_prophet <- mase(as.numeric(weekly_test$HOUSEHOLD_1_099) ,tail(prophet_forecast_99$yhat[], n=28))
+
+#residuals prophet
+residuals_prophet_HH99 <- tail(prophet_forecast_99$yhat[],28) - weekly_test$HOUSEHOLD_1_099
+
+# prophet box_test pvalue
+HH99_prophet_box_test_pvalue <- Box.test(residuals_prophet_HH99, lag =14, type ="Ljung")$p.value
+
+#generic prophet plot
+plot(p_weekly_train_HH_99, prophet_forecast_99)
+
+#cool interactive graph with prophet
+dyplot.prophet(p_weekly_train_HH_99, prophet_forecast_99)
+```
+
+
+
+
+
+### Collecting mase scores for item 99
+```{r}
+mace_res_99 <- c( mase99_avg_daily,
+                  mase99_avg_weekly,
+                  mase99_naive_daily,
+                  mase99_naive_weekly,
+                  mase99_seas_naive_daily,
+                  mase99_seas_naive_weekly,
+                  mase99_linmod,
+                  mase99_arima_daily,
+                  mase99_arima_weekly,
+                  mase99_seas_arima_daily,
+                  mase99_seas_arima_weekly,
+                  mase99_arfima,
+                  mase99_hw,
+                  mase99_stl,
+                  mase99_prophet
+                  )
+```
+
+### Collecting p-values of Ljung Box test for item 99
+```{r}
+box_test_res_99 <- c(HH99_avg_daily_boxtest_pvalue, 
+            HH99_avg_weekly_boxtest_pvalue,
+            HH99_naive_daily_boxtest_pvalue,
+            HH99_naive_weekly_boxtest_pvalue,
+            HH99_seas_naive_daily_boxtest_pvalue,
+            HH99_seas_naive_weekly_boxtest_pvalue,
+            HH99_linmod_box_test_pvalue,
+            HH99_arima_daily_box_test_pvalue,
+            HH99_arima_weekly_box_test_pvalue,
+            HH99_seas_arima_daily_box_test_pvalue,
+            HH99_seas_arima_weekly_box_test_pvalue,
+            HH99_arfima_box_test_pvalue,
+            HH99_hw_box_test_pvalue,
+            HH99_stl_box_test_pvalue,
+            HH99_prophet_box_test_pvalue
+            )
+```
+
+
+
+
+
+
+
+
+# Modeling Item HH 125
+
+### Average
+```{r}
+#calculating forecasts
+HH125_avg_daily <- meanf(daily_train_HH_125, h=28)
+HH125_avg_weekly <- meanf(weekly_train_HH_125, h=28)
+
+#calculating mase
+mase125_avg_daily <- mase(as.numeric(daily_test_HH_125), as.numeric(HH125_avg_daily$mean))
+mase125_avg_weekly <- mase(as.numeric(weekly_test_HH_125), as.numeric(HH125_avg_weekly$mean))
+
+
+#calculating residuals
+HH125_avg_daily_residuals <- residuals(meanf(daily_train_HH_125, h=28))
+HH125_avg_weekly_residuals <- residuals(meanf(weekly_train_HH_125, h=28))
+
+#Box Tests
+HH125_avg_daily_boxtest_pvalue <- Box.test(HH125_avg_daily_residuals, lag =10, type ="Ljung")$p.value
+HH125_avg_weekly_boxtest_pvalue <- Box.test(HH125_avg_weekly_residuals, lag =14, type ="Ljung")$p.value
+
+#checkresiduals(HH125_avg_daily)
+#checkresiduals(HH125_avg_weekly)
+```
+
+### Naive
+```{r}
+#calculating forecasts
+HH125_naive_daily <- naive(daily_train_HH_125, h=28)
+HH125_naive_weekly <- naive(weekly_train_HH_125, h=28)
+
+#calculating mase
+mase125_naive_daily <- mase(as.numeric(daily_test_HH_125), as.numeric(HH125_naive_daily$mean))
+mase125_naive_weekly <- mase(as.numeric(weekly_test_HH_125), as.numeric(HH125_naive_weekly$mean))
+
+#calculating residuals
+HH125_naive_daily_residuals <- residuals(naive(daily_train_HH_125, h=28))
+HH125_naive_weekly_residuals <- residuals(naive(weekly_train_HH_125, h=28))
+
+#Box Tests
+HH125_naive_daily_boxtest_pvalue <- Box.test(HH125_naive_daily_residuals, lag =10, type ="Ljung")$p.value
+HH125_naive_weekly_boxtest_pvalue <- Box.test(HH125_naive_weekly_residuals, lag =14, type ="Ljung")$p.value
+
+#visual check of residuals
+checkresiduals(HH125_naive_daily)
+checkresiduals(HH125_naive_weekly)
+
+```
+
+### Seasonal Naive
+```{r}
+#calculating forecasts
+HH125_seas_naive_daily <- snaive(daily_train_HH_125, h=28)
+HH125_seas_naive_weekly <- snaive(weekly_train_HH_125, h=28)
+
+#calculating mase 
+mase125_seas_naive_daily <- mase(as.numeric(daily_test_HH_125), as.numeric(HH125_seas_naive_daily$mean))
+mase125_seas_naive_weekly <- mase(as.numeric(weekly_test_HH_125), as.numeric(HH125_seas_naive_weekly$mean))
+
+#calculating residuals
+HH125_seas_naive_daily_residuals <- residuals(snaive(daily_train_HH_125, h=28))
+HH125_seas_naive_weekly_residuals <- residuals(snaive(weekly_train_HH_125, h=28))
+
+#Box tests
+HH125_seas_naive_daily_boxtest_pvalue <- Box.test(HH125_seas_naive_daily_residuals, lag =10, type ="Ljung")$p.value
+HH125_seas_naive_weekly_boxtest_pvalue <- Box.test(HH125_seas_naive_weekly_residuals, lag =14, type ="Ljung")$p.value
+
+#visual check of residuals
+checkresiduals(HH125_seas_naive_daily)
+checkresiduals(HH125_seas_naive_weekly)
+
+```
+
+### Regression
+(xreg = trend, year, day dummies, month dummies, snap, event dummies, prices in category)es
+```{r}
+#creating linear model
+HH125_linmod <- lm(HOUSEHOLD_1_125~., data =regression_train)
+
+#forecasting linear model
+HH125_linmod_forecast <- predict(HH125_linmod, newdata = regression_test)
+
+#calculating mase
+mase125_linmod <- mase(as.numeric(weekly_test_HH_125),HH125_linmod_forecast)
+
+#Box test
+HH125_linmod_box_test_pvalue <- Box.test(HH125_linmod$residuals, lag =14, type ="Ljung")$p.value
+
+#visual inspection of residuals
+checkresiduals(HH125_linmod)
+```
+
+### Arima
+```{r}
+#running auto arima
+HH125_arima_daily <- auto.arima(daily_train_HH_125, seasonal = F)
+HH125_arima_weekly <- auto.arima(weekly_train_HH_125, seasonal = F)
+
+#calculating forecast
+HH125_arima_daily_forecast <- forecast(HH125_arima_daily, h=28)
+HH125_arima_weekly_forecast <- forecast(HH125_arima_weekly, h=28)
+
+#calculating mase
+mase125_arima_daily <- mase(as.numeric(daily_test_HH_125), as.numeric(HH125_arima_daily_forecast$mean))
+mase125_arima_weekly <- mase(as.numeric(weekly_test_HH_125), as.numeric(HH125_arima_weekly_forecast$mean))
+
+#residuals
+HH125_arima_daily_residuals <- residuals(HH125_arima_daily)
+HH125_arima_weekly_residuals <- residuals(HH125_arima_weekly)
+
+#boxtest pvalue
+HH125_arima_daily_box_test_pvalue <- Box.test(HH125_arima_daily_residuals, lag =10, type ="Ljung")$p.value
+HH125_arima_weekly_box_test_pvalue <- Box.test(HH125_arima_weekly_residuals, lag =14, type ="Ljung")$p.value
+
+#visual inspection of residuals
+checkresiduals(HH125_arima_daily)
+checkresiduals(HH125_arima_weekly)
+```
+
+### Seasonal Arima
+```{r}
+#fitting seasonal auto arima
+HH125_seas_arima_daily <- auto.arima(daily_train_HH_125, seasonal = T)
+HH125_seas_arima_weekly <- auto.arima(weekly_train_HH_125, seasonal = T)
+
+#forecasting 
+HH125_seas_arima_daily_forecast <- forecast(HH125_seas_arima_daily, h=28)
+HH125_seas_arima_weekly_forecast <- forecast(HH125_seas_arima_weekly, h=28)
+
+#calculating mase
+mase125_seas_arima_daily <- mase(as.numeric(daily_test_HH_125), as.numeric(HH125_seas_arima_daily_forecast$mean))
+mase125_seas_arima_weekly <- mase(as.numeric(weekly_test_HH_125), as.numeric(HH125_seas_arima_weekly_forecast$mean))
+
+#boxtest pvalue
+HH125_seas_arima_daily_box_test_pvalue <- Box.test(residuals(HH125_seas_arima_daily), lag =10, type ="Ljung")$p.value
+HH125_seas_arima_weekly_box_test_pvalue <- Box.test(residuals(HH125_seas_arima_weekly), lag =14, type ="Ljung")$p.value
+
+#visual inspection
+checkresiduals(HH125_seas_arima_daily)
+checkresiduals(HH125_seas_arima_weekly)
+```
+
+### Regression with ARIMA errors (xreg = prices in category, snap, event type dummies)
+```{r}
+#grabbing x_reg
+regression_xreg <- as.matrix(regression_train[,9:35])
+
+#fitting with auto arima
+#HH125_reg_arma_errors_mod <- auto.arima(regression_train$HOUSEHOLD_1_125, xreg = regression_xreg)
+#HH125_reg_arma_errors_forecast <- predict(HH125_reg_arma_errors, newdata=regression_test[,9:35])
+
+#calculating mase
+#mase125_reg_arima_errors <- mase(as.numeric(daily_test_HH_125), as.numeric(HH125_reg_arma_errors_forecast))
+mase125_reg_arima_errors <- 0
+
+#stopping here because this did not work for some reason...
+```
+
+### ARFIMA
+```{r}
+#fitting arfima
+HH125_arfima <- arfima(regression_train$HOUSEHOLD_1_125)
+
+#forecasting values
+HH125_arfima_forecast <- forecast(HH125_arfima, h=28)
+
+#calculating mase
+mase125_arfima <- mase(as.numeric(daily_test_HH_125), as.numeric(HH125_arfima_forecast$mean))
+
+#box test pvalue
+HH125_arfima_box_test_pvalue <- Box.test(residuals(HH125_arfima), lag =10, type ="Ljung")$p.value
+
+#visual inspection
+checkresiduals(HH125_arfima)
+```
+
+### Holt Winters
+```{r}
+#fititng model
+HH125_hw_mod <- HoltWinters(weekly_train_HH_125, seasonal='additive')
+
+#forecasting
+HH125_hw_forecast <- forecast(HH125_hw_mod, h=28)
+
+#calculating mase
+mase125_hw <- mase(as.numeric(daily_test_HH_125), as.numeric(HH125_hw_forecast$mean))
+
+#box test
+HH125_hw_box_test_pvalue <- Box.test(residuals(HH125_hw_mod), lag =10, type ="Ljung")$p.value
+
+#visaual inspection
+checkresiduals(HH125_hw_mod)
+```
+
+### STL
+```{r}
+#fitting model
+HH125_stl <- stl(weekly_train_HH_125, 'periodic')
+
+#forecasting
+HH125_stl_forecast <- forecast(HH125_stl, h=28)
+
+#calculating mase
+mase125_stl <- mase(as.numeric(weekly_test_HH_125), as.numeric(HH125_stl_forecast$mean))
+
+#box test on residuals aka remainder
+HH125_stl_box_test_pvalue <- Box.test(remainder(HH125_stl), lag =10, type ="Ljung")$p.value
+
+#visual inspection
+checkresiduals(remainder(HH125_stl))
+```
+
+#Prophet
+```{r}
+library(prophet)
+
+prophet_weekly_train_HH_125 <- as.data.frame(
+   cbind(
+   "ds" = as.vector(as.Date(dates[1:1885], format="%Y-%m-%d")),
+   "y" = as.vector(weekly_train_HH_125$HOUSEHOLD_1_125)
+))
+prophet_weekly_train_HH_125[['ds']] <- as.Date(prophet_weekly_train_HH_125[['ds']], format='%Y-%m-%d')
+
+
+#prophet_weekly_train_HH_125
+
+#fitting prophet onto data
+p_weekly_train_HH_125 <- prophet(prophet_weekly_train_HH_125)
+
+#making future dataframe
+future_125 <- make_future_dataframe(p_weekly_train_HH_125, periods = 28)
+
+#creating forecast
+prophet_forecast_125 <- predict(p_weekly_train_HH_125, future_125)
+
+
+#prophet mase
+mase125_prophet <- mase(as.numeric(weekly_test$HOUSEHOLD_1_125) ,tail(prophet_forecast_125$yhat[], n=28))
+
+#residuals prophet
+residuals_prophet_HH125 <- tail(prophet_forecast_125$yhat[],28) - weekly_test$HOUSEHOLD_1_125
+
+# prophet box_test pvalue
+HH125_prophet_box_test_pvalue <- Box.test(residuals_prophet_HH125, lag =14, type ="Ljung")$p.value
+
+#generic prophet plot
+plot(p_weekly_train_HH_125, prophet_forecast_125)
+
+#cool interactive graph with prophet
+dyplot.prophet(p_weekly_train_HH_125, prophet_forecast_125)
+```
+
+
+
+
+
+
+### Collecting mase scores for item 125
+```{r}
+mace_res_125 <- c( mase125_avg_daily,
+                  mase125_avg_weekly,
+                  mase125_naive_daily,
+                  mase125_naive_weekly,
+                  mase125_seas_naive_daily,
+                  mase125_seas_naive_weekly,
+                  mase125_linmod,
+                  mase125_arima_daily,
+                  mase125_arima_weekly,
+                  mase125_seas_arima_daily,
+                  mase125_seas_arima_weekly,
+                  mase125_arfima,
+                  mase125_hw,
+                  mase125_stl,
+                  mase125_prophet
+                  )
+```
+
+### Collecting p-values of Ljung Box test for item 125
+```{r}
+box_test_res_125 <- c(HH125_avg_daily_boxtest_pvalue, 
+            HH125_avg_weekly_boxtest_pvalue,
+            HH125_naive_daily_boxtest_pvalue,
+            HH125_naive_weekly_boxtest_pvalue,
+            HH125_seas_naive_daily_boxtest_pvalue,
+            HH125_seas_naive_weekly_boxtest_pvalue,
+            HH125_linmod_box_test_pvalue,
+            HH125_arima_daily_box_test_pvalue,
+            HH125_arima_weekly_box_test_pvalue,
+            HH125_seas_arima_daily_box_test_pvalue,
+            HH125_seas_arima_weekly_box_test_pvalue,
+            HH125_arfima_box_test_pvalue,
+            HH125_hw_box_test_pvalue,
+            HH125_stl_box_test_pvalue,
+            HH125_prophet_box_test_pvalue
+            )
+```
+
+
+
+
+
+
+
+# Modeling Item 129
+
+### Average
+```{r}
+#calculating forecasts
+HH129_avg_daily <- meanf(daily_train_HH_129, h=28)
+HH129_avg_weekly <- meanf(weekly_train_HH_129, h=28)
+
+#calculating mase
+mase129_avg_daily <- mase(as.numeric(daily_test_HH_129), as.numeric(HH129_avg_daily$mean))
+mase129_avg_weekly <- mase(as.numeric(weekly_test_HH_129), as.numeric(HH129_avg_weekly$mean))
+
+
+#calculating residuals
+HH129_avg_daily_residuals <- residuals(meanf(daily_train_HH_129, h=28))
+HH129_avg_weekly_residuals <- residuals(meanf(weekly_train_HH_129, h=28))
+
+#Box Tests
+HH129_avg_daily_boxtest_pvalue <- Box.test(HH129_avg_daily_residuals, lag =10, type ="Ljung")$p.value
+HH129_avg_weekly_boxtest_pvalue <- Box.test(HH129_avg_weekly_residuals, lag =14, type ="Ljung")$p.value
+
+#checkresiduals(HH129_avg_daily)
+#checkresiduals(HH129_avg_weekly)
+```
+
+### Naive
+```{r}
+#calculating forecasts
+HH129_naive_daily <- naive(daily_train_HH_129, h=28)
+HH129_naive_weekly <- naive(weekly_train_HH_129, h=28)
+
+#calculating mase
+mase129_naive_daily <- mase(as.numeric(daily_test_HH_129), as.numeric(HH129_naive_daily$mean))
+mase129_naive_weekly <- mase(as.numeric(weekly_test_HH_129), as.numeric(HH129_naive_weekly$mean))
+
+#calculating residuals
+HH129_naive_daily_residuals <- residuals(naive(daily_train_HH_129, h=28))
+HH129_naive_weekly_residuals <- residuals(naive(weekly_train_HH_129, h=28))
+
+#Box Tests
+HH129_naive_daily_boxtest_pvalue <- Box.test(HH129_naive_daily_residuals, lag =10, type ="Ljung")$p.value
+HH129_naive_weekly_boxtest_pvalue <- Box.test(HH129_naive_weekly_residuals, lag =14, type ="Ljung")$p.value
+
+#visual check of residuals
+checkresiduals(HH129_naive_daily)
+checkresiduals(HH129_naive_weekly)
+```
+
+### Seasonal Naive
+```{r}
+#calculating forecasts
+HH129_seas_naive_daily <- snaive(daily_train_HH_129, h=28)
+HH129_seas_naive_weekly <- snaive(weekly_train_HH_129, h=28)
+
+#calculating mase 
+mase129_seas_naive_daily <- mase(as.numeric(daily_test_HH_129), as.numeric(HH129_seas_naive_daily$mean))
+mase129_seas_naive_weekly <- mase(as.numeric(weekly_test_HH_129), as.numeric(HH129_seas_naive_weekly$mean))
+
+#calculating residuals
+HH129_seas_naive_daily_residuals <- residuals(snaive(daily_train_HH_129, h=28))
+HH129_seas_naive_weekly_residuals <- residuals(snaive(weekly_train_HH_129, h=28))
+
+#Box tests
+HH129_seas_naive_daily_boxtest_pvalue <- Box.test(HH129_seas_naive_daily_residuals, lag =10, type ="Ljung")$p.value
+HH129_seas_naive_weekly_boxtest_pvalue <- Box.test(HH129_seas_naive_weekly_residuals, lag =14, type ="Ljung")$p.value
+
+#visual check of residuals
+checkresiduals(HH129_seas_naive_daily)
+checkresiduals(HH129_seas_naive_weekly)
+
+```
+
+### Regression
+(xreg = trend, year, day dummies, month dummies, snap, event dummies, prices in category)es
+```{r}
+#creating linear model
+HH129_linmod <- lm(HOUSEHOLD_1_129~., data =regression_train)
+
+#forecasting linear model
+HH129_linmod_forecast <- predict(HH129_linmod, newdata = regression_test)
+
+#calculating mase
+mase129_linmod <- mase(as.numeric(weekly_test_HH_129),HH129_linmod_forecast)
+
+#Box test
+HH129_linmod_box_test_pvalue <- Box.test(HH129_linmod$residuals, lag =14, type ="Ljung")$p.value
+
+#visual inspection of residuals
+checkresiduals(HH129_linmod)
+```
+
+### Arima
+```{r}
+#running auto arima
+HH129_arima_daily <- auto.arima(daily_train_HH_129, seasonal = F)
+HH129_arima_weekly <- auto.arima(weekly_train_HH_129, seasonal = F)
+
+#calculating forecast
+HH129_arima_daily_forecast <- forecast(HH129_arima_daily, h=28)
+HH129_arima_weekly_forecast <- forecast(HH129_arima_weekly, h=28)
+
+#calculating mase
+mase129_arima_daily <- mase(as.numeric(daily_test_HH_129), as.numeric(HH129_arima_daily_forecast$mean))
+mase129_arima_weekly <- mase(as.numeric(weekly_test_HH_129), as.numeric(HH129_arima_weekly_forecast$mean))
+
+#residuals
+HH129_arima_daily_residuals <- residuals(HH129_arima_daily)
+HH129_arima_weekly_residuals <- residuals(HH129_arima_weekly)
+
+#boxtest pvalue
+HH129_arima_daily_box_test_pvalue <- Box.test(HH129_arima_daily_residuals, lag =10, type ="Ljung")$p.value
+HH129_arima_weekly_box_test_pvalue <- Box.test(HH129_arima_weekly_residuals, lag =14, type ="Ljung")$p.value
+
+#visual inspection of residuals
+checkresiduals(HH129_arima_daily)
+checkresiduals(HH129_arima_weekly)
+```
+
+### Seasonal Arima
+```{r}
+#fitting seasonal auto arima
+HH129_seas_arima_daily <- auto.arima(daily_train_HH_129, seasonal = T)
+HH129_seas_arima_weekly <- auto.arima(weekly_train_HH_129, seasonal = T)
+
+#forecasting 
+HH129_seas_arima_daily_forecast <- forecast(HH129_seas_arima_daily, h=28)
+HH129_seas_arima_weekly_forecast <- forecast(HH129_seas_arima_weekly, h=28)
+
+#calculating mase
+mase129_seas_arima_daily <- mase(as.numeric(daily_test_HH_129), as.numeric(HH129_seas_arima_daily_forecast$mean))
+mase129_seas_arima_weekly <- mase(as.numeric(weekly_test_HH_129), as.numeric(HH129_seas_arima_weekly_forecast$mean))
+
+#boxtest pvalue
+HH129_seas_arima_daily_box_test_pvalue <- Box.test(residuals(HH129_seas_arima_daily), lag =10, type ="Ljung")$p.value
+HH129_seas_arima_weekly_box_test_pvalue <- Box.test(residuals(HH129_seas_arima_weekly), lag =14, type ="Ljung")$p.value
+
+#visual inspection
+checkresiduals(HH129_seas_arima_daily)
+checkresiduals(HH129_seas_arima_weekly)
+```
+
+### Regression with ARIMA errors (xreg = prices in category, snap, event type dummies)
+```{r}
+#grabbing x_reg
+regression_xreg <- as.matrix(regression_train[,9:35])
+
+#fitting with auto arima
+#HH129_reg_arma_errors_mod <- auto.arima(regression_train$HOUSEHOLD_1_129, xreg = regression_xreg)
+#HH129_reg_arma_errors_forecast <- predict(HH129_reg_arma_errors, newdata=regression_test[,9:35])
+
+#calculating mase
+#mase129_reg_arima_errors <- mase(as.numeric(daily_test_HH_129), as.numeric(HH129_reg_arma_errors_forecast))
+mase129_reg_arima_errors <- 0
+
+
+
+#stopping here because this did not work for some reason...
+```
+
+### ARFIMA
+```{r}
+#fitting arfima
+HH129_arfima <- arfima(regression_train$HOUSEHOLD_1_129)
+
+#forecasting values
+HH129_arfima_forecast <- forecast(HH129_arfima, h=28)
+
+#calculating mase
+mase129_arfima <- mase(as.numeric(daily_test_HH_129), as.numeric(HH129_arfima_forecast$mean))
+
+#box test pvalue
+HH129_arfima_box_test_pvalue <- Box.test(residuals(HH129_arfima), lag =10, type ="Ljung")$p.value
+
+#visual inspection
+checkresiduals(HH129_arfima)
+```
+
+### Holt Winters
+```{r}
+#fititng model
+HH129_hw_mod <- HoltWinters(weekly_train_HH_129, seasonal='additive')
+
+#forecasting
+HH129_hw_forecast <- forecast(HH129_hw_mod, h=28)
+
+#calculating mase
+mase129_hw <- mase(as.numeric(daily_test_HH_129), as.numeric(HH129_hw_forecast$mean))
+
+#box test
+HH129_hw_box_test_pvalue <- Box.test(residuals(HH129_hw_mod), lag =10, type ="Ljung")$p.value
+
+#visaual inspection
+checkresiduals(HH129_hw_mod)
+```
+
+### STL
+```{r}
+#fitting model
+HH129_stl <- stl(weekly_train_HH_129, 'periodic')
+
+#forecasting
+HH129_stl_forecast <- forecast(HH129_stl, h=28)
+
+#calculating mase
+mase129_stl <- mase(as.numeric(weekly_test_HH_129), as.numeric(HH129_stl_forecast$mean))
+
+#box test on residuals aka remainder
+HH129_stl_box_test_pvalue <- Box.test(remainder(HH129_stl), lag =10, type ="Ljung")$p.value
+
+#visual inspection
+checkresiduals(remainder(HH129_stl))
+```
+
+
+
+#Prophet
+```{r}
+library(prophet)
+
+prophet_weekly_train_HH_129 <- as.data.frame(
+   cbind(
+   "ds" = as.vector(as.Date(dates[1:1885], format="%Y-%m-%d")),
+   "y" = as.vector(weekly_train_HH_129$HOUSEHOLD_1_129)
+))
+prophet_weekly_train_HH_129[['ds']] <- as.Date(prophet_weekly_train_HH_129[['ds']], format='%Y-%m-%d')
+
+
+#prophet_weekly_train_HH_129
+
+#fitting prophet onto data
+p_weekly_train_HH_129 <- prophet(prophet_weekly_train_HH_129)
+
+#making future dataframe
+future_129 <- make_future_dataframe(p_weekly_train_HH_129, periods = 28)
+
+#creating forecast
+prophet_forecast_129 <- predict(p_weekly_train_HH_129, future_129)
+
+
+#prophet mase
+mase129_prophet <- mase(as.numeric(weekly_test$HOUSEHOLD_1_129) ,tail(prophet_forecast_129$yhat[], n=28))
+
+#residuals prophet
+residuals_prophet_HH129 <- tail(prophet_forecast_129$yhat[],28) - weekly_test$HOUSEHOLD_1_129
+
+# prophet box_test pvalue
+HH129_prophet_box_test_pvalue <- Box.test(residuals_prophet_HH129, lag =14, type ="Ljung")$p.value
+
+#generic prophet plot
+plot(p_weekly_train_HH_129, prophet_forecast_129)
+
+#cool interactive graph with prophet
+dyplot.prophet(p_weekly_train_HH_129, prophet_forecast_129)
+```
+
+
+
+
+
+### Collecting mase scores for item 129
+```{r}
+mace_res_129 <- c( mase129_avg_daily,
+                  mase129_avg_weekly,
+                  mase129_naive_daily,
+                  mase129_naive_weekly,
+                  mase129_seas_naive_daily,
+                  mase129_seas_naive_weekly,
+                  mase129_linmod,
+                  mase129_arima_daily,
+                  mase129_arima_weekly,
+                  mase129_seas_arima_daily,
+                  mase129_seas_arima_weekly,
+                  mase129_arfima,
+                  mase129_hw,
+                  mase129_stl,
+                  mase129_prophet
+                  )
+```
+
+### Collecting p-values of Ljung Box test for item 129
+```{r}
+box_test_res_129 <- c(HH129_avg_daily_boxtest_pvalue, 
+            HH129_avg_weekly_boxtest_pvalue,
+            HH129_naive_daily_boxtest_pvalue,
+            HH129_naive_weekly_boxtest_pvalue,
+            HH129_seas_naive_daily_boxtest_pvalue,
+            HH129_seas_naive_weekly_boxtest_pvalue,
+            HH129_linmod_box_test_pvalue,
+            HH129_arima_daily_box_test_pvalue,
+            HH129_arima_weekly_box_test_pvalue,
+            HH129_seas_arima_daily_box_test_pvalue,
+            HH129_seas_arima_weekly_box_test_pvalue,
+            HH129_arfima_box_test_pvalue,
+            HH129_hw_box_test_pvalue,
+            HH129_stl_box_test_pvalue,
+            HH129_prophet_box_test_pvalue
+            )
+```
+
+
+
+
+
+
+
+# Modeling Item 474
+
+### Average
+```{r}
+#calculating forecasts
+HH474_avg_daily <- meanf(daily_train_HH_474, h=28)
+HH474_avg_weekly <- meanf(weekly_train_HH_474, h=28)
+
+#calculating mase
+mase474_avg_daily <- mase(as.numeric(daily_test_HH_474), as.numeric(HH474_avg_daily$mean))
+mase474_avg_weekly <- mase(as.numeric(weekly_test_HH_474), as.numeric(HH474_avg_weekly$mean))
+
+
+#calculating residuals
+HH474_avg_daily_residuals <- residuals(meanf(daily_train_HH_474, h=28))
+HH474_avg_weekly_residuals <- residuals(meanf(weekly_train_HH_474, h=28))
+
+#Box Tests
+HH474_avg_daily_boxtest_pvalue <- Box.test(HH474_avg_daily_residuals, lag =10, type ="Ljung")$p.value
+HH474_avg_weekly_boxtest_pvalue <- Box.test(HH474_avg_weekly_residuals, lag =14, type ="Ljung")$p.value
+
+#checkresiduals(HH474_avg_daily)
+#checkresiduals(HH474_avg_weekly)
+```
+
+### Naive
+```{r}
+#calculating forecasts
+HH474_naive_daily <- naive(daily_train_HH_474, h=28)
+HH474_naive_weekly <- naive(weekly_train_HH_474, h=28)
+
+#calculating mase
+mase474_naive_daily <- mase(as.numeric(daily_test_HH_474), as.numeric(HH474_naive_daily$mean))
+mase474_naive_weekly <- mase(as.numeric(weekly_test_HH_474), as.numeric(HH474_naive_weekly$mean))
+
+#calculating residuals
+HH474_naive_daily_residuals <- residuals(naive(daily_train_HH_474, h=28))
+HH474_naive_weekly_residuals <- residuals(naive(weekly_train_HH_474, h=28))
+
+#Box Tests
+HH474_naive_daily_boxtest_pvalue <- Box.test(HH474_naive_daily_residuals, lag =10, type ="Ljung")$p.value
+HH474_naive_weekly_boxtest_pvalue <- Box.test(HH474_naive_weekly_residuals, lag =14, type ="Ljung")$p.value
+
+#visual check of residuals
+checkresiduals(HH474_naive_daily)
+checkresiduals(HH474_naive_weekly)
+
+```
+
+### Seasonal Naive
+```{r}
+#calculating forecasts
+HH474_seas_naive_daily <- snaive(daily_train_HH_474, h=28)
+HH474_seas_naive_weekly <- snaive(weekly_train_HH_474, h=28)
+
+#calculating mase 
+mase474_seas_naive_daily <- mase(as.numeric(daily_test_HH_474), as.numeric(HH474_seas_naive_daily$mean))
+mase474_seas_naive_weekly <- mase(as.numeric(weekly_test_HH_474), as.numeric(HH474_seas_naive_weekly$mean))
+
+#calculating residuals
+HH474_seas_naive_daily_residuals <- residuals(snaive(daily_train_HH_474, h=28))
+HH474_seas_naive_weekly_residuals <- residuals(snaive(weekly_train_HH_474, h=28))
+
+#Box tests
+HH474_seas_naive_daily_boxtest_pvalue <- Box.test(HH474_seas_naive_daily_residuals, lag =10, type ="Ljung")$p.value
+HH474_seas_naive_weekly_boxtest_pvalue <- Box.test(HH474_seas_naive_weekly_residuals, lag =14, type ="Ljung")$p.value
+
+#visual check of residuals
+checkresiduals(HH474_seas_naive_daily)
+checkresiduals(HH474_seas_naive_weekly)
+
+```
+
+### Regression
+(xreg = trend, year, day dummies, month dummies, snap, event dummies, prices in category)es
+```{r}
+#creating linear model
+HH474_linmod <- lm(HOUSEHOLD_1_474~., data =regression_train)
+
+#forecasting linear model
+HH474_linmod_forecast <- predict(HH474_linmod, newdata = regression_test)
+
+#calculating mase
+mase474_linmod <- mase(as.numeric(weekly_test_HH_474),HH474_linmod_forecast)
+
+#Box test
+HH474_linmod_box_test_pvalue <- Box.test(HH474_linmod$residuals, lag =14, type ="Ljung")$p.value
+
+#visual inspection of residuals
+checkresiduals(HH474_linmod)
+```
+
+### Arima
+```{r}
+#running auto arima
+HH474_arima_daily <- auto.arima(daily_train_HH_474, seasonal = F)
+HH474_arima_weekly <- auto.arima(weekly_train_HH_474, seasonal = F)
+
+#calculating forecast
+HH474_arima_daily_forecast <- forecast(HH474_arima_daily, h=28)
+HH474_arima_weekly_forecast <- forecast(HH474_arima_weekly, h=28)
+
+#calculating mase
+mase474_arima_daily <- mase(as.numeric(daily_test_HH_474), as.numeric(HH474_arima_daily_forecast$mean))
+mase474_arima_weekly <- mase(as.numeric(weekly_test_HH_474), as.numeric(HH474_arima_weekly_forecast$mean))
+
+#residuals
+HH474_arima_daily_residuals <- residuals(HH474_arima_daily)
+HH474_arima_weekly_residuals <- residuals(HH474_arima_weekly)
+
+#boxtest pvalue
+HH474_arima_daily_box_test_pvalue <- Box.test(HH474_arima_daily_residuals, lag =10, type ="Ljung")$p.value
+HH474_arima_weekly_box_test_pvalue <- Box.test(HH474_arima_weekly_residuals, lag =14, type ="Ljung")$p.value
+
+#visual inspection of residuals
+checkresiduals(HH474_arima_daily)
+checkresiduals(HH474_arima_weekly)
+```
+
+### Seasonal Arima
+```{r}
+#fitting seasonal auto arima
+HH474_seas_arima_daily <- auto.arima(daily_train_HH_474, seasonal = T)
+HH474_seas_arima_weekly <- auto.arima(weekly_train_HH_474, seasonal = T)
+
+#forecasting 
+HH474_seas_arima_daily_forecast <- forecast(HH474_seas_arima_daily, h=28)
+HH474_seas_arima_weekly_forecast <- forecast(HH474_seas_arima_weekly, h=28)
+
+#calculating mase
+mase474_seas_arima_daily <- mase(as.numeric(daily_test_HH_474), as.numeric(HH474_seas_arima_daily_forecast$mean))
+mase474_seas_arima_weekly <- mase(as.numeric(weekly_test_HH_474), as.numeric(HH474_seas_arima_weekly_forecast$mean))
+
+#boxtest pvalue
+HH474_seas_arima_daily_box_test_pvalue <- Box.test(residuals(HH474_seas_arima_daily), lag =10, type ="Ljung")$p.value
+HH474_seas_arima_weekly_box_test_pvalue <- Box.test(residuals(HH474_seas_arima_weekly), lag =14, type ="Ljung")$p.value
+
+#visual inspection
+checkresiduals(HH474_seas_arima_daily)
+checkresiduals(HH474_seas_arima_weekly)
+```
+
+### Regression with ARIMA errors (xreg = prices in category, snap, event type dummies)
+```{r}
+#grabbing x_reg
+regression_xreg <- as.matrix(regression_train[,9:35])
+
+#fitting with auto arima
+#HH474_reg_arma_errors_mod <- auto.arima(regression_train$HOUSEHOLD_1_474, xreg = regression_xreg)
+#HH474_reg_arma_errors_forecast <- predict(HH474_reg_arma_errors, newdata=regression_test[,9:35])
+
+#calculating mase
+#mase474_reg_arima_errors <- mase(as.numeric(daily_test_HH_474), as.numeric(HH474_reg_arma_errors_forecast))
+
+mase474_reg_arima_errors <- 0 
+#stopping here because this did not work for some reason...
+```
+
+### ARFIMA
+```{r}
+#fitting arfima
+HH474_arfima <- arfima(regression_train$HOUSEHOLD_1_474)
+
+#forecasting values
+HH474_arfima_forecast <- forecast(HH474_arfima, h=28)
+
+#calculating mase
+mase474_arfima <- mase(as.numeric(daily_test_HH_474), as.numeric(HH474_arfima_forecast$mean))
+
+#box test pvalue
+HH474_arfima_box_test_pvalue <- Box.test(residuals(HH474_arfima), lag =10, type ="Ljung")$p.value
+
+#visual inspection
+checkresiduals(HH474_arfima)
+```
+
+### Holt Winters
+```{r}
+#fititng model
+HH474_hw_mod <- HoltWinters(weekly_train_HH_474, seasonal='additive')
+
+#forecasting
+HH474_hw_forecast <- forecast(HH474_hw_mod, h=28)
+
+#calculating mase
+mase474_hw <- mase(as.numeric(daily_test_HH_474), as.numeric(HH474_hw_forecast$mean))
+
+#box test
+HH474_hw_box_test_pvalue <- Box.test(residuals(HH474_hw_mod), lag =10, type ="Ljung")$p.value
+
+#visaual inspection
+checkresiduals(HH474_hw_mod)
+```
+
+### STL
+```{r}
+#fitting model
+HH474_stl <- stl(weekly_train_HH_474, 'periodic')
+
+#forecasting
+HH474_stl_forecast <- forecast(HH474_stl, h=28)
+
+#calculating mase
+mase474_stl <- mase(as.numeric(weekly_test_HH_474), as.numeric(HH474_stl_forecast$mean))
+
+#box test on residuals aka remainder
+HH474_stl_box_test_pvalue <- Box.test(remainder(HH474_stl), lag =10, type ="Ljung")$p.value
+
+#visual inspection
+checkresiduals(remainder(HH474_stl))
+```
+
+#Prophet
+```{r}
+library(prophet)
+
+prophet_weekly_train_HH_474 <- as.data.frame(
+   cbind(
+   "ds" = as.vector(dates[1:1885]),
+   "y" = as.vector(weekly_train_HH_474$HOUSEHOLD_1_474)
+))
+prophet_weekly_train_HH_474[['ds']] <- as.Date(prophet_weekly_train_HH_474[['ds']], format='%Y-%m-%d')
+
+
+#fitting prophet onto data
+p_weekly_train_HH_474 <- prophet(prophet_weekly_train_HH_474)
+
+#making future dataframe
+future_474 <- make_future_dataframe(p_weekly_train_HH_474, periods = 28)
+
+#creating forecast
+prophet_forecast_474 <- predict(p_weekly_train_HH_474, future_474)
+
+
+#prophet mase
+mase474_prophet <- mase(as.numeric(weekly_test$HOUSEHOLD_1_474) ,tail(prophet_forecast_474$yhat[], n=28))
+
+#residuals prophet
+residuals_prophet_HH474 <- tail(prophet_forecast_474$yhat[],28) - weekly_test$HOUSEHOLD_1_474
+
+# prophet box_test pvalue
+HH474_prophet_box_test_pvalue <- Box.test(residuals_prophet_HH474, lag =14, type ="Ljung")$p.value
+
+#generic prophet plot
+plot(p_weekly_train_HH_474, prophet_forecast_474)
+
+#cool interactive graph with prophet
+dyplot.prophet(p_weekly_train_HH_474, prophet_forecast_474)
+```
+
+cool interactive graph
+```{r}
+dyplot.prophet(p_weekly_train_HH_474, prophet_forecast_474)
+```
+
+
+### Collecting mase scores for item 474
+```{r}
+mace_res_474 <- c( mase474_avg_daily,
+                  mase474_avg_weekly,
+                  mase474_naive_daily,
+                  mase474_naive_weekly,
+                  mase474_seas_naive_daily,
+                  mase474_seas_naive_weekly,
+                  mase474_linmod,
+                  mase474_arima_daily,
+                  mase474_arima_weekly,
+                  mase474_seas_arima_daily,
+                  mase474_seas_arima_weekly,
+                  mase474_arfima,
+                  mase474_hw,
+                  mase474_stl,
+                  mase474_prophet
+                  )
+```
+
+### Collecting p-values of Ljung Box test for item 474
+```{r}
+box_test_res_474 <- c(HH474_avg_daily_boxtest_pvalue, 
+            HH474_avg_weekly_boxtest_pvalue,
+            HH474_naive_daily_boxtest_pvalue,
+            HH474_naive_weekly_boxtest_pvalue,
+            HH474_seas_naive_daily_boxtest_pvalue,
+            HH474_seas_naive_weekly_boxtest_pvalue,
+            HH474_linmod_box_test_pvalue,
+            HH474_arima_daily_box_test_pvalue,
+            HH474_arima_weekly_box_test_pvalue,
+            HH474_seas_arima_daily_box_test_pvalue,
+            HH474_seas_arima_weekly_box_test_pvalue,
+            HH474_arfima_box_test_pvalue,
+            HH474_hw_box_test_pvalue,
+            HH474_stl_box_test_pvalue,
+            HH474_prophet_box_test_pvalue
+            )
+```
+
+
+
+
+# Compiling Results!
+
+### mase
+```{r}
+mase_results <- as.data.frame(rbind(mace_res_27,
+                      mace_res_99,
+                      mace_res_125,
+                      mace_res_129,
+                      mace_res_474))
+colnames(mase_results) <-c("Daily Average", "Weekly Average", "Naive Daily", "Naive Weekly", "Seas Naive Daily", "Seas Naive Weekly", "Linear Model", "ARIMA daily", "ARIMA weekly", "Seas ARIMA daily", "Seas ARIMA weekly", "ARFIMA", "Holt Winters", "STL", "Prophet")
+
+mase_results
+
+```
+
+transposing for ease of plotting
+```{r}
+mase_results_T <- as.data.frame(t(mase_results))
+mase_results_T$model <- rownames(mase_results_T)
+
+mase_results_T
+```
+
+Plotting results
+```{r}
+#colors <- c("27" = "red", "99" = "orange", "125" = "green", "129" = "blue", "474" = "purple")
+ggplot(data=mase_results_T, mapping=aes(x=model)) +
+  geom_line(aes(y=mace_res_27, group = "27"), col='red') + 
+  geom_line(aes(y=mace_res_99, group= "99"), col='orange') + 
+  geom_line(aes(y=mace_res_125, group = '125'), col='green') + 
+  geom_line(aes(y=mace_res_129, group= '129'), col='blue') + 
+  geom_line(aes(y=mace_res_474, group = '474'), col='purple') + 
+  
+  scale_color_manual(values = colors) +
+
+  
+  theme(axis.text.x = element_text(angle = 45)) +
+  
+
+  labs(title="MASE score on Household Items by Model Type",
+        x ="Model Type", y = "MASE score")
+  
+```
+
+Inital Takeaways:
+  STL best for 27
+  STL/HW best for 99
+  Linear model best for 125
+  STL/HW best for 129
+  Linear model best for 474
+
+
+### Box Test Pvalue
+```{r}
+box_test_results <- as.data.frame(rbind(box_test_res_27,
+                           box_test_res_99,
+                           box_test_res_125,
+                           box_test_res_129,
+                           box_test_res_474))
+colnames(box_test_results) <-c("Daily Average", "Weekly Average", "Naive Daily", "Naive Weekly", "Seas Naive Daily", "Seas Naive Weekly", "Linear Model", "ARIMA daily", "ARIMA weekly", "Seas ARIMA daily", "Seas ARIMA weekly", "ARFIMA", "Holt Winters", "STL", "Prophet")
+
+#box_test_results
+```
+
+transposing for ease of plots
+```{r}
+box_test_results_T <- as.data.frame(t(box_test_results))
+box_test_results_T$model <- rownames(box_test_results_T)
+
+box_test_results_T
+```
+
+
+plotting boxtest results
+```{r}
+ggplot(data=box_test_results_T, mapping=aes(x=model)) +
+  geom_line(aes(y=box_test_res_27, group = "27"), col='red') + 
+  geom_line(aes(y=box_test_res_99, group= "99"), col='orange') + 
+  geom_line(aes(y=box_test_res_125, group = '125'), col='green') + 
+  geom_line(aes(y=box_test_res_129, group= '129'), col='blue') + 
+  geom_line(aes(y=box_test_res_474, group = '474'), col='purple') + 
+  geom_line(aes(y=.05, group= "na"),linetype = "dashed") +
+      theme(axis.text.x = element_text(angle = 45)) +
+      labs(title="Ljung Box pvalue by Model Type",
+                  x ="Model Type", y = "P-value")
+```
+
+Overall Takeaways (including visual residual/ACF check) Before Prophet:
+  STL best for 27
+  Seasonal ARIMA weekly best for 99
+  Linear model best for 125
+  HW best for 129
+  Seasonal ARIMA weekly Arima best for 474
+  
+  
+# After prophet:
+
+Prophet rocks!
+It is the best for 4/5 models with 129 being the exception(HW)
+
+
+
+Plotting prophet components
+```{r}
+prophet_plot_components(p_weekly_train_HH_27, prophet_forecast_27)
+prophet_plot_components(p_weekly_train_HH_99, prophet_forecast_99)
+prophet_plot_components(p_weekly_train_HH_125, prophet_forecast_125)
+prophet_plot_components(p_weekly_train_HH_129, prophet_forecast_129)
+prophet_plot_components(p_weekly_train_HH_474, prophet_forecast_474)
+```
+
+
+
+Plotting prophet residuals
+```{r}
+plot(residuals_prophet_HH27)
+plot(residuals_prophet_HH99)
+plot(residuals_prophet_HH125)
+plot(residuals_prophet_HH129)
+plot(residuals_prophet_HH474)
+```
+
+
+```{r}
+residuals_prophet_HH27 <- head(prophet_forecast_27$yhat[],1885) - weekly_train$HOUSEHOLD_1_27
+residuals_prophet_HH474 <- head(prophet_forecast_474$yhat[],1885) - weekly_train$HOUSEHOLD_1_474
+residuals_prophet_HH474 <- head(prophet_forecast_474$yhat[],1885) - weekly_train$HOUSEHOLD_1_474
+residuals_prophet_HH474 <- head(prophet_forecast_474$yhat[],1885) - weekly_train$HOUSEHOLD_1_474
+residuals_prophet_HH474 <- head(prophet_forecast_474$yhat[],1885) - weekly_train$HOUSEHOLD_1_474
+
+plot(residuals_prophet_HH474)
+plot(residuals_prophet_HH474)
+plot(residuals_prophet_HH474)
+plot(residuals_prophet_HH474)
+plot(residuals_prophet_HH474)
+
+
+```
+
+
+
+
+
+
+
+
+
+How to tsCV for prophet?
+```{r}
+tsCV(weekly_train_HH_27, prophet_forecast_27, h=28 )
+
+```
+
+
+  
+
+ 
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
